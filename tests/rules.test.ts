@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ConcertEvent, conflictsFor, money, toIcs, totals } from '../src/domain/rules';
+import { ConcertEvent, conflictsFor, money, totals } from '../src/domain/rules';
+import { toIcs } from '../src/domain/exchange';
 const event = (id: string, startAt: string, endAt: string): ConcertEvent => ({ id, title: id, artists: '测试', type: '演唱会', startAt, endAt, city: '上海', venue: '测试场馆', status: '待观看', currency: 'CNY', color: '#000', tags: [], expenses: [], preparation: [], createdAt: startAt, updatedAt: startAt });
 test('finds time conflicts and keeps adjacent events separate', () => { const a = event('a', '2026-10-01T10:00:00.000Z', '2026-10-01T12:00:00.000Z'); assert.equal(conflictsFor(a, [a, event('b', '2026-10-01T11:00:00.000Z', '2026-10-01T13:00:00.000Z')]).length, 1); assert.equal(conflictsFor(a, [a, event('c', '2026-10-01T12:00:00.000Z', '2026-10-01T13:00:00.000Z')]).length, 0); });
 test('uses integer minor units in totals and creates a calendar payload', () => { const a = { ...event('a', '2026-10-01T10:00:00.000Z', '2026-10-01T12:00:00.000Z'), price: 58000, expenses: [{ id: 'x', category: '交通', amount: 1200 }] }; assert.equal(totals([a]), 59200); assert.equal(money(totals([a])), '¥592.00'); assert.match(toIcs([a]), /BEGIN:VEVENT/); assert.match(toIcs([a]), /DTEND/); });

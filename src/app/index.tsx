@@ -1,60 +1,244 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { loadEvents, saveEvents } from '@/data/store';
-import { ConcertEvent, EventStatus, EventType, conflictsFor, eventTypes, isPast, money, statuses, toCsv, toIcs, totals } from '@/domain/rules';
-
-type Tab = '日历' | '添加' | '搜索' | '统计' | '地图' | '我的';
-const tabs: Tab[] = ['日历', '添加', '搜索', '统计', '地图', '我的'];
-const now = () => new Date().toISOString();
-const pad = (n: number) => String(n).padStart(2, '0');
-const localInput = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:00`;
-const display = (iso?: string) => iso ? new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-const badge = (status: EventStatus) => status === '待开票' ? '#f08052' : status === '已取消' ? '#8b8b97' : status === '已观看' ? '#5296bd' : '#8066df';
-
-export default function Myconcert() {
-  const [events, setEvents] = useState<ConcertEvent[]>([]); const [tab, setTab] = useState<Tab>('日历'); const [clock] = useState(() => Date.now());
-  const [selected, setSelected] = useState<ConcertEvent | null>(null); const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<EventStatus | '全部'>('全部'); const [importText, setImportText] = useState('');
-  const update = (next: ConcertEvent[]) => { setEvents(next); void saveEvents(next); };
-  useEffect(() => { void loadEvents().then(setEvents).catch(() => Alert.alert('本地数据不可用', '请稍后重试，已有记录不会被清空。')); }, []);
-  const upcoming = useMemo(() => events.filter((e) => !isPast(e) && e.status !== '已取消').sort((a, b) => a.startAt.localeCompare(b.startAt))[0], [events]);
-  const filtered = useMemo(() => events.filter((e) => (status === '全部' || e.status === status) && `${e.title}${e.artists}${e.venue}${e.city}${e.note || ''}${e.tags.join('')}`.toLowerCase().includes(query.toLowerCase())).sort((a,b) => a.startAt.localeCompare(b.startAt)), [events, query, status]);
-  const remove = (id: string) => { update(events.filter((e) => e.id !== id)); setSelected(null); };
-  const importJson = () => { try { const received = JSON.parse(importText); if (!Array.isArray(received)) throw new Error(); const valid = received.filter((e) => e.id && e.title && e.startAt && e.endAt) as ConcertEvent[]; update([...events.filter((e) => !valid.some((n) => n.id === e.id)), ...valid]); setImportText(''); Alert.alert('导入完成', `已导入 ${valid.length} 条记录。`); } catch { Alert.alert('无法导入', '请粘贴由 Myconcert 导出的 JSON 数组。CSV 与 ICS 可在“我的”中导出后由系统日历或表格软件打开。'); } };
-  const month = new Date(); const days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  return <SafeAreaView style={s.safe}><StatusBar style="light" /><View style={s.app}>
-    <View style={s.top}><Text style={s.brand}>Myconcert</Text><Text style={s.sub}>本地模式 · 你的现场行程簿</Text></View>
-    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-      {tab === '日历' && <><View style={s.hero}><Text style={s.eyebrow}>下一场</Text><Text style={s.heroTitle}>{upcoming?.title || '还没有安排现场'}</Text><Text style={s.heroMeta}>{upcoming ? `${display(upcoming.startAt)} · ${upcoming.city} ${upcoming.venue}` : '从添加一场演出开始'}</Text>{upcoming && <Text style={s.countdown}>距开演 {Math.max(0, Math.ceil((+new Date(upcoming.startAt) - clock) / 86400000))} 天</Text>}</View>
-        <Section title={`${month.getFullYear()} 年 ${month.getMonth() + 1} 月`} hint={`本月 ${events.filter(e => new Date(e.startAt).getMonth() === month.getMonth()).length} 场`}><View style={s.calendar}>{Array.from({ length: days }, (_, index) => { const d = index + 1; const hit = events.filter(e => new Date(e.startAt).getFullYear() === month.getFullYear() && new Date(e.startAt).getMonth() === month.getMonth() && new Date(e.startAt).getDate() === d); return <Pressable accessibilityLabel={`${d} 日，${hit.length} 场演出`} key={d} style={s.day} onPress={() => hit[0] && setSelected(hit[0])}><Text style={s.dayNum}>{d}</Text><View style={s.dots}>{hit.slice(0,3).map(e => <View key={e.id} style={[s.dot, { backgroundColor: e.color }]} />)}</View></Pressable>; })}</View></Section>
-        <Section title="日程 / 周视图"><EventRows events={filtered.filter(e => !isPast(e)).slice(0, 6)} onPick={setSelected} empty="本周没有待赴约的演出。" /></Section></>}
-      {tab === '添加' && <AddForm events={events} onAdd={(event) => { update([event, ...events]); setTab('日历'); }} />}
-      {tab === '搜索' && <><Section title="搜索与筛选"><TextInput value={query} onChangeText={setQuery} placeholder="名称、艺人、场馆、备注或标签" placeholderTextColor="#888697" style={s.input} accessibilityLabel="搜索演出" /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>{(['全部', ...statuses] as const).map(x => <Chip key={x} active={status === x} label={x} onPress={() => setStatus(x)} />)}</ScrollView></Section><Section title={`找到 ${filtered.length} 条`}><EventRows events={filtered} onPick={setSelected} empty="没有匹配记录，试试清除筛选或新建演出。" /></Section></>}
-      {tab === '统计' && <Stats events={events} />}
-      {tab === '地图' && <MapFallback events={events} />}
-      {tab === '我的' && <><Section title="数据与隐私"><Text style={s.muted}>当前为本地模式。票根、照片、备注与位置不会上传或公开；配置 Supabase 后才可启用账户同步。</Text><Action label="导出 JSON" onPress={() => { setImportText(JSON.stringify(events, null, 2)); Alert.alert('JSON 已生成', '已放入下方文本框；可复制保存，或再次粘贴导入。'); }} /><Action label="导出 CSV" onPress={() => { setImportText(toCsv(events)); Alert.alert('CSV 已生成', '已放入下方文本框，可复制到表格软件。'); }} /><Action label="生成 ICS 日历" onPress={() => { setImportText(toIcs(events)); Alert.alert('ICS 已生成', '已放入下方文本框，可保存为 .ics 后导入系统日历。'); }} /></Section><Section title="导入 JSON"><TextInput multiline value={importText} onChangeText={setImportText} placeholder="粘贴 Myconcert 导出的 JSON" placeholderTextColor="#888697" style={[s.input, s.textarea]} accessibilityLabel="导入数据文本" /><Action label="确认导入" onPress={importJson} /></Section><Section title="账户与设置"><Text style={s.muted}>主题跟随系统。通知、OCR、公开链接解析和地图均采用手动录入降级方案；原生小组件数据接口预留为下一场、开票倒计时和月历摘要。</Text><Action label="删除所有本地数据" destructive onPress={() => Alert.alert('确认删除？', '这会删除本机所有演出记录，无法撤销。', [{ text: '取消' }, { text: '删除', style: 'destructive', onPress: () => update([]) }])} /></Section></>}
-    </ScrollView>
-    <View style={s.nav}>{tabs.map(t => <Pressable key={t} style={s.navItem} onPress={() => setTab(t)} accessibilityRole="tab" accessibilityState={{ selected: tab === t }}><Text style={[s.navText, tab === t && s.navActive]}>{t}</Text></Pressable>)}</View>
-    <EventDetail event={selected} all={events} onClose={() => setSelected(null)} onUpdate={(next) => update(events.map(e => e.id === next.id ? next : e))} onRemove={remove} />
-  </View></SafeAreaView>;
+import { useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import { router } from "expo-router";
+import { useData } from "@/data/context";
+import {
+  Button,
+  Card,
+  Choices,
+  Label,
+  Rows,
+  Screen,
+  usePalette,
+} from "@/components/ui";
+import { dayKey, onDay } from "@/domain/rules";
+export default function Home() {
+  const { data, clock } = useData();
+  const p = usePalette();
+  const [day, setDay] = useState(() => dayKey(new Date()));
+  const [mode, setMode] = useState("月历");
+  const selected = new Date(day + "T12:00:00");
+  const events = [...data.events].sort((a, b) =>
+    a.startAt.localeCompare(b.startAt),
+  );
+  const next = events.find(
+    (e) =>
+      +new Date(e.endAt) > clock &&
+      !["已取消", "已观看", "想看", "待开票"].includes(e.status),
+  );
+  const sale = [...events]
+    .filter(
+      (e) => e.status === "待开票" && e.saleAt && +new Date(e.saleAt) > clock,
+    )
+    .sort((a, b) => a.saleAt!.localeCompare(b.saleAt!))[0];
+  const monthStart = new Date(selected.getFullYear(), selected.getMonth(), 1);
+  const monthEnd = new Date(selected.getFullYear(), selected.getMonth() + 1, 1);
+  const monthEvents = events.filter(
+    (e) => +new Date(e.startAt) < +monthEnd && +new Date(e.endAt) > +monthStart,
+  );
+  const weekStart = new Date(selected);
+  weekStart.setDate(selected.getDate() - ((selected.getDay() + 6) % 7));
+  weekStart.setHours(0, 0, 0, 0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7);
+  const weekEvents = events.filter(
+    (e) => +new Date(e.startAt) < +weekEnd && +new Date(e.endAt) > +weekStart,
+  );
+  const offset = (monthStart.getDay() + 6) % 7;
+  const count = new Date(
+    selected.getFullYear(),
+    selected.getMonth() + 1,
+    0,
+  ).getDate();
+  const days =
+    mode === "周视图"
+      ? Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(weekStart);
+          d.setDate(d.getDate() + i);
+          return dayKey(d);
+        })
+      : Array.from({ length: Math.ceil((offset + count) / 7) * 7 }, (_, i) =>
+          i < offset || i >= offset + count
+            ? ""
+            : dayKey(
+                new Date(
+                  selected.getFullYear(),
+                  selected.getMonth(),
+                  i - offset + 1,
+                ),
+              ),
+        );
+  function move(direction: number) {
+    const d = new Date(selected);
+    if (mode === "周视图") d.setDate(d.getDate() + 7 * direction);
+    else {
+      d.setDate(1);
+      d.setMonth(d.getMonth() + direction);
+    }
+    setDay(dayKey(d));
+  }
+  const countdown = (iso: string) => {
+    const hours = Math.max(0, Math.ceil((+new Date(iso) - clock) / 3600000));
+    return hours >= 24
+      ? Math.floor(hours / 24) + " 天 " + (hours % 24) + " 小时"
+      : hours + " 小时";
+  };
+  return (
+    <Screen title="日历">
+      <Card title="下一场">
+        {next ? (
+          <>
+            <Rows events={[next]} />
+            <Label>
+              {+new Date(next.startAt) <= clock
+                ? "正在进行"
+                : "距开演 " + countdown(next.startAt)}
+            </Label>
+          </>
+        ) : (
+          <Label>暂无即将赴约的演出</Label>
+        )}
+        {sale ? (
+          <>
+            <Label>
+              待开票 · {sale.title} · 还有 {countdown(sale.saleAt!)}
+            </Label>
+            <Button
+              title="查看待开票演出"
+              onPress={() =>
+                router.push({
+                  pathname: "/event/[id]",
+                  params: { id: sale.id },
+                })
+              }
+            />
+          </>
+        ) : (
+          <Label muted>暂无未来开票提醒</Label>
+        )}
+      </Card>
+      <Card
+        title={
+          selected.getFullYear() +
+          " 年 " +
+          (selected.getMonth() + 1) +
+          " 月 · " +
+          monthEvents.length +
+          " 场"
+        }
+      >
+        <Choices
+          label="显示方式"
+          value={mode}
+          options={["月历", "周视图", "日程列表", "时间轴"]}
+          onChange={setMode}
+        />
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <Button title="上一页" onPress={() => move(-1)} />
+          <Button
+            title="今天"
+            onPress={() => setDay(dayKey(new Date(clock)))}
+          />
+          <Button title="下一页" onPress={() => move(1)} />
+        </View>
+        {["月历", "周视图"].includes(mode) ? (
+          <>
+            <View style={{ flexDirection: "row" }}>
+              {["一", "二", "三", "四", "五", "六", "日"].map((x) => (
+                <Text
+                  key={x}
+                  style={{
+                    width: "14.28%",
+                    color: p.muted,
+                    textAlign: "center",
+                  }}
+                >
+                  {x}
+                </Text>
+              ))}
+            </View>
+            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+              {days.map((key, i) => {
+                const hits = key ? events.filter((e) => onDay(e, key)) : [];
+                return key ? (
+                  <Pressable
+                    key={key}
+                    accessibilityRole="button"
+                    accessibilityLabel={key + "，" + hits.length + "场"}
+                    accessibilityState={{ selected: key === day }}
+                    onPress={() => setDay(key)}
+                    style={{
+                      width: "14.28%",
+                      minHeight: 56,
+                      padding: 4,
+                      borderWidth: key === day ? 2 : 0,
+                      borderColor: p.accent,
+                      borderRadius: 8,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ color: p.text }}>
+                      {Number(key.slice(-2))}
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 2 }}>
+                      {hits.slice(0, 3).map((e) => (
+                        <View
+                          key={e.id}
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor:
+                              e.status === "已取消" ? p.muted : e.color,
+                          }}
+                        />
+                      ))}
+                    </View>
+                  </Pressable>
+                ) : (
+                  <View key={i} style={{ width: "14.28%" }} />
+                );
+              })}
+            </View>
+            <Label large>{day}</Label>
+            <Rows events={events.filter((e) => onDay(e, day))} />
+            <Button
+              title="在这天添加演出"
+              onPress={() =>
+                router.push({ pathname: "/edit", params: { day } })
+              }
+            />
+            {mode === "周视图" && (
+              <>
+                <Label large>本周全部演出</Label>
+                <Rows events={weekEvents} />
+              </>
+            )}
+          </>
+        ) : mode === "日程列表" ? (
+          <Rows events={monthEvents} />
+        ) : (
+          <View style={{ gap: 14 }}>
+            {monthEvents.length === 0 && <Label>本月暂无演出。</Label>}
+            {monthEvents.map((e) => (
+              <View
+                key={e.id}
+                style={{
+                  borderLeftWidth: 2,
+                  borderColor: p.accent,
+                  paddingLeft: 10,
+                }}
+              >
+                <Label>
+                  {new Date(e.startAt).toLocaleString()} →{" "}
+                  {new Date(e.endAt).toLocaleString()}
+                </Label>
+                <Rows events={[e]} />
+              </View>
+            ))}
+          </View>
+        )}
+      </Card>
+    </Screen>
+  );
 }
-
-function AddForm({ events, onAdd }: { events: ConcertEvent[]; onAdd: (event: ConcertEvent) => void }) {
-  const start = new Date(); start.setDate(start.getDate() + 7); start.setHours(19, 0, 0, 0); const end = new Date(start); end.setHours(21);
-  const [title, setTitle] = useState(''); const [artists, setArtists] = useState(''); const [city, setCity] = useState(''); const [venue, setVenue] = useState(''); const [type, setType] = useState<EventType>('演唱会'); const [state, setState] = useState<EventStatus>('待观看'); const [startAt, setStartAt] = useState(localInput(start)); const [endAt, setEndAt] = useState(localInput(end)); const [price, setPrice] = useState(''); const [saleAt, setSaleAt] = useState(''); const [note, setNote] = useState('');
-  const submit = () => { const parsedStart = new Date(startAt); const parsedEnd = new Date(endAt); if (!title.trim() || !city.trim() || !venue.trim() || Number.isNaN(+parsedStart) || Number.isNaN(+parsedEnd) || parsedEnd <= parsedStart) return Alert.alert('请检查必填项', '名称、城市、场馆，以及正确的开始/结束时间是必填项。'); const event: ConcertEvent = { id: `local-${Date.now()}`, title: title.trim(), artists: artists.trim() || '未知艺人', city: city.trim(), venue: venue.trim(), type, status: state, startAt: parsedStart.toISOString(), endAt: parsedEnd.toISOString(), saleAt: saleAt ? new Date(saleAt).toISOString() : undefined, price: Math.round(Number(price || 0) * 100), currency: 'CNY', note, tags: [], color: '#9b7cff', expenses: [], preparation: [], createdAt: now(), updatedAt: now() }; const conflicts = conflictsFor(event, events); if (conflicts.length) Alert.alert('发现时间冲突', `与「${conflicts.map(e => e.title).join('、')}」重叠，仍会保存，方便你调整行程。`); onAdd(event); };
-  return <><Section title="新建演出" hint="先填写行程，其他信息随时补充"><Field label="演出名称 *" value={title} set={setTitle} placeholder="例如：潮汐回声巡演" /><Field label="艺人 / 阵容" value={artists} set={setArtists} placeholder="北岸乐队" /><Picker label="类型" value={type} values={eventTypes} set={setType} /><Field label="城市 *" value={city} set={setCity} placeholder="上海" /><Field label="场馆 *" value={venue} set={setVenue} placeholder="场馆名称" /><Field label="开始时间 *" value={startAt} set={setStartAt} placeholder="2026-09-26T19:00" /><Field label="结束时间 *" value={endAt} set={setEndAt} placeholder="2026-09-26T21:00" /><Picker label="状态" value={state} values={statuses} set={setState} /></Section><Section title="票务与记录（可选）"><Field label="票价（元）" value={price} set={setPrice} placeholder="580" keyboard="decimal-pad" /><Field label="开票时间" value={saleAt} set={setSaleAt} placeholder="2026-09-26T12:00" /><Field label="备注" value={note} set={setNote} placeholder="座位、购票平台、取票说明等" /></Section><Action label="保存到本地日历" onPress={submit} /></>;
-}
-
-function EventDetail({ event, all, onClose, onUpdate, onRemove }: { event: ConcertEvent | null; all: ConcertEvent[]; onClose: () => void; onUpdate: (event: ConcertEvent) => void; onRemove: (id: string) => void }) { if (!event) return null; const conflicts = conflictsFor(event, all); return <Modal visible transparent animationType="slide" onRequestClose={onClose}><View style={s.modalShade}><View style={s.sheet}><View style={[s.poster, { backgroundColor: event.color }]}><Text style={s.posterLabel}>{event.type}</Text><Text style={s.posterTitle}>{event.title}</Text></View><ScrollView><Text style={s.detailTitle}>{event.title}</Text><Text style={s.detailMeta}>{event.artists} · {display(event.startAt)}—{display(event.endAt)}</Text><Text style={s.detailMeta}>{event.city} · {event.venue}</Text><Text style={[s.status, { backgroundColor: badge(event.status) }]}>{event.status}</Text>{conflicts.length > 0 && <Text style={s.warning}>时间冲突：{conflicts.map(e => e.title).join('、')}</Text>}<Section title="票务与费用"><Text style={s.muted}>票价 {money(event.price)} · {event.seat || '座位待补充'}</Text><Text style={s.muted}>总支出 {money((event.price || 0) + event.expenses.reduce((n, e) => n + e.amount, 0))}</Text><Action label="添加交通费 ¥10" onPress={() => onUpdate({ ...event, expenses: [...event.expenses, { id: `cost-${Date.now()}`, category: '交通', amount: 1000 }], updatedAt: now() })} /></Section><Section title="赴约准备"><View>{event.preparation.map(p => <Pressable key={p.id} onPress={() => onUpdate({ ...event, preparation: event.preparation.map(x => x.id === p.id ? { ...x, done: !x.done } : x), updatedAt: now() })}><Text style={s.check}>{p.done ? '☑' : '☐'} {p.title}</Text></Pressable>)}<Action label="添加：取票" onPress={() => onUpdate({ ...event, preparation: [...event.preparation, { id: `prep-${Date.now()}`, title: '取票', done: false }], updatedAt: now() })} /></View></Section><Section title="媒体与提醒"><Text style={s.muted}>票根、海报、现场照片和视频仅保存在你的设备（媒体附件入口可接入系统相册）。提醒默认不创建；需先获得系统通知授权。</Text></Section><Action label={event.status === '已观看' ? '标记为待观看' : '标记为已观看'} onPress={() => onUpdate({ ...event, status: event.status === '已观看' ? '待观看' : '已观看', updatedAt: now() })} /><Action label="删除这场演出" destructive onPress={() => Alert.alert('删除演出？', '本机记录会被移除。', [{ text: '取消' }, { text: '删除', style: 'destructive', onPress: () => onRemove(event.id) }])} /><Action label="关闭" onPress={onClose} /></ScrollView></View></View></Modal> }
-function Stats({ events }: { events: ConcertEvent[] }) { const watched = events.filter(e => e.status === '已观看'); const cities = new Set(events.map(e => e.city)).size; const artists = events.reduce<Record<string, number>>((a, e) => ({ ...a, [e.artists]: (a[e.artists] || 0) + 1 }), {}); const favorite = Object.entries(artists).sort((a,b) => b[1] - a[1])[0]; return <><Section title="年度回顾" hint={`${new Date().getFullYear()} 年`}><View style={s.stats}><Metric value={String(events.length)} label="总场次" /><Metric value={money(totals(events))} label="总花费" /><Metric value={String(cities)} label="到访城市" /><Metric value={favorite?.[0] || '—'} label="常看艺人" /></View></Section><Section title="观演足迹"><Text style={s.muted}>已观看 {watched.length} 场 · 累计 {watched.reduce((n, e) => n + Math.round((+new Date(e.endAt) - +new Date(e.startAt)) / 3600000), 0)} 小时 · 平均评分 {watched.filter(e => e.rating).length ? (watched.reduce((n,e) => n + (e.rating || 0), 0) / watched.filter(e => e.rating).length).toFixed(1) : '尚未评分'}</Text></Section><Section title="代表性演出"><EventRows events={watched.slice(0, 3)} onPick={() => undefined} empty="完成一场观演后，这里会生成你的回忆。" /></Section></> }
-function MapFallback({ events }: { events: ConcertEvent[] }) { const groups = events.reduce<Record<string, ConcertEvent[]>>((out, event) => ({ ...out, [event.city]: [...(out[event.city] || []), event] }), {}); return <><Section title="城市足迹" hint="地图离线时使用列表"><Text style={s.muted}>未申请位置权限，因此不显示精确场馆坐标。按需开启地图服务后可替换为地图视图。</Text></Section>{Object.entries(groups).map(([city, list]) => <Section key={city} title={city} hint={`${list.length} 场`}><EventRows events={list} onPick={() => undefined} empty="" /></Section>)}</> }
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) { return <View style={s.section}><View style={s.sectionHead}><Text style={s.sectionTitle}>{title}</Text>{hint && <Text style={s.hint}>{hint}</Text>}</View>{children}</View>; }
-function EventRows({ events, onPick, empty }: { events: ConcertEvent[]; onPick: (event: ConcertEvent) => void; empty: string }) { if (!events.length) return <Text style={s.muted}>{empty}</Text>; return <View>{events.map(event => <Pressable key={event.id} style={s.row} onPress={() => onPick(event)} accessibilityLabel={`查看 ${event.title}`}><View style={[s.mark, { backgroundColor: event.color }]} /><View style={s.rowMain}><Text style={s.rowTitle}>{event.title}</Text><Text style={s.rowMeta}>{display(event.startAt)} · {event.venue}</Text></View><Text style={[s.pill, { color: badge(event.status) }]}>{event.status}</Text></Pressable>)}</View>; }
-function Field({ label, value, set, placeholder, keyboard }: { label: string; value: string; set: (v: string) => void; placeholder: string; keyboard?: 'decimal-pad' }) { return <View style={s.field}><Text style={s.label}>{label}</Text><TextInput value={value} onChangeText={set} placeholder={placeholder} placeholderTextColor="#888697" style={s.input} keyboardType={keyboard} accessibilityLabel={label} /></View>; }
-function Picker<T extends string>({ label, value, values, set }: { label: string; value: T; values: readonly T[]; set: (v: T) => void }) { return <View style={s.field}><Text style={s.label}>{label}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>{values.map(v => <Chip key={v} active={value === v} label={v} onPress={() => set(v)} />)}</ScrollView></View>; }
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) { return <Pressable onPress={onPress} style={[s.chip, active && s.chipActive]}><Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text></Pressable>; }
-function Action({ label, onPress, destructive }: { label: string; onPress: () => void; destructive?: boolean }) { return <Pressable onPress={onPress} style={[s.action, destructive && s.danger]}><Text style={s.actionText}>{label}</Text></Pressable>; }
-function Metric({ value, label }: { value: string; label: string }) { return <View style={s.metric}><Text numberOfLines={1} style={s.metricValue}>{value}</Text><Text style={s.metricLabel}>{label}</Text></View>; }
-const s = StyleSheet.create({ safe:{flex:1,backgroundColor:'#15131f'},app:{flex:1,backgroundColor:'#f6f4fb'},top:{backgroundColor:'#15131f',paddingHorizontal:20,paddingTop:12,paddingBottom:18},brand:{color:'#fff',fontSize:27,fontWeight:'800',letterSpacing:-.5},sub:{color:'#bdb8d1',fontSize:13,marginTop:3},content:{padding:16,paddingBottom:92,gap:14},hero:{backgroundColor:'#241c3c',borderRadius:20,padding:20},eyebrow:{color:'#c4b7ff',fontWeight:'700',fontSize:13},heroTitle:{color:'#fff',fontSize:25,fontWeight:'800',marginTop:8},heroMeta:{color:'#d6d0eb',marginTop:7},countdown:{color:'#f5cf77',fontWeight:'700',marginTop:13},section:{backgroundColor:'#fff',borderRadius:16,padding:16,gap:10},sectionHead:{flexDirection:'row',justifyContent:'space-between',alignItems:'baseline'},sectionTitle:{fontSize:17,fontWeight:'800',color:'#272334'},hint:{fontSize:12,color:'#827d92'},muted:{color:'#686477',fontSize:14,lineHeight:21},calendar:{flexDirection:'row',flexWrap:'wrap'},day:{width:'14.28%',height:49,padding:5},dayNum:{fontSize:13,color:'#3c374b'},dots:{flexDirection:'row',gap:2,marginTop:4},dot:{width:6,height:6,borderRadius:3},row:{flexDirection:'row',alignItems:'center',paddingVertical:12,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'#e4e1eb',gap:10},mark:{width:4,height:36,borderRadius:2},rowMain:{flex:1},rowTitle:{fontWeight:'700',fontSize:15,color:'#292438'},rowMeta:{fontSize:12,color:'#777184',marginTop:3},pill:{fontSize:12,fontWeight:'700'},input:{borderWidth:1,borderColor:'#ded9e8',borderRadius:10,paddingHorizontal:12,paddingVertical:10,color:'#282333',fontSize:14,backgroundColor:'#fcfbfe'},textarea:{height:130,textAlignVertical:'top'},chips:{gap:8,paddingVertical:2},chip:{borderWidth:1,borderColor:'#dcd7e7',borderRadius:20,paddingHorizontal:12,paddingVertical:7},chipActive:{backgroundColor:'#29213f',borderColor:'#29213f'},chipText:{fontSize:13,color:'#5d576b'},chipTextActive:{color:'#fff',fontWeight:'700'},field:{gap:6},label:{fontSize:13,fontWeight:'700',color:'#4c465b'},action:{backgroundColor:'#29213f',paddingVertical:12,paddingHorizontal:14,borderRadius:10,marginTop:8,alignItems:'center'},danger:{backgroundColor:'#a4364d'},actionText:{color:'#fff',fontWeight:'800',fontSize:14},nav:{position:'absolute',bottom:0,left:0,right:0,backgroundColor:'#fff',borderTopWidth:1,borderColor:'#e6e2ed',height:67,flexDirection:'row',alignItems:'center'},navItem:{flex:1,alignItems:'center',paddingVertical:12},navText:{fontSize:12,color:'#888292'},navActive:{color:'#6b4fd9',fontWeight:'800'},modalShade:{flex:1,backgroundColor:'rgba(0,0,0,.45)',justifyContent:'flex-end'},sheet:{maxHeight:'90%',backgroundColor:'#f6f4fb',borderTopLeftRadius:24,borderTopRightRadius:24,padding:16,gap:12},poster:{borderRadius:16,padding:18,minHeight:130,justifyContent:'space-between'},posterLabel:{color:'#fff',fontWeight:'700',opacity:.8},posterTitle:{color:'#fff',fontSize:24,fontWeight:'800'},detailTitle:{fontSize:24,fontWeight:'800',color:'#282334',marginTop:14},detailMeta:{color:'#676275',marginTop:5},status:{color:'#fff',alignSelf:'flex-start',paddingHorizontal:10,paddingVertical:5,borderRadius:14,overflow:'hidden',fontWeight:'700',marginTop:10},warning:{color:'#b35321',backgroundColor:'#fff1e5',padding:10,borderRadius:8,marginTop:10},check:{paddingVertical:8,color:'#443d55',fontSize:15},stats:{flexDirection:'row',flexWrap:'wrap'},metric:{width:'50%',paddingVertical:12},metricValue:{fontWeight:'800',fontSize:20,color:'#2d2740',paddingRight:10},metricLabel:{color:'#7c7689',fontSize:13,marginTop:3} });
