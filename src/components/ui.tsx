@@ -8,12 +8,13 @@ import {
   View,
   StyleSheet,
 } from "react-native";
-import { router, type Href } from "expo-router";
+import { router, usePathname, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useData } from "@/data/context";
 import { ConcertEvent } from "@/domain/rules";
 export const tabs = [
-  ["/", "日历"],
+  ["/", "演出"],
+  ["/calendar", "日历"],
   ["/edit", "添加"],
   ["/search", "搜索"],
   ["/stats", "统计"],
@@ -69,11 +70,13 @@ export function Button({
   onPress,
   disabled = false,
   danger = false,
+  subtle = false,
 }: {
   title: string;
   onPress: () => void | Promise<void>;
   disabled?: boolean;
   danger?: boolean;
+  subtle?: boolean;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -104,14 +107,14 @@ export function Button({
           minHeight: 46,
           justifyContent: "center",
           padding: 12,
-          backgroundColor: danger ? "#a72f4e" : p.accent,
+          backgroundColor: danger ? "#a72f4e" : subtle ? "transparent" : p.accent,
           borderRadius: 10,
           opacity: disabled || pending ? 0.45 : pressed ? 0.7 : 1,
         })}
       >
         <Text
           style={{
-            color: p.accent === "#bca6ff" && !danger ? "#221834" : "#fff",
+            color: subtle && !danger ? p.accent : p.accent === "#bca6ff" && !danger ? "#221834" : "#fff",
             fontWeight: "700",
             textAlign: "center",
           }}
@@ -126,22 +129,30 @@ export function Button({
 export function Card({
   title,
   children,
+  collapsible = false,
 }: {
   title?: string;
   children: React.ReactNode;
+  collapsible?: boolean;
 }) {
   const p = usePalette();
+  const [expanded, setExpanded] = useState(false);
   return (
     <View
       style={{
         padding: 16,
-        borderRadius: 16,
+        borderRadius: 22,
         backgroundColor: p.card,
         gap: 12,
       }}
     >
-      {title && <Label large>{title}</Label>}
-      {children}
+      {title && (collapsible ? <Pressable accessibilityRole="button" accessibilityLabel={title}
+        accessibilityState={{ expanded }} onPress={() => setExpanded((v) => !v)}
+        style={{ minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Text style={{ color: p.text, fontSize: 20, fontWeight: "700", flex: 1 }}>{title}</Text>
+        <Text style={{ color: p.accent }}>{expanded ? "⌃" : "⌄"}</Text>
+      </Pressable> : <Label large>{title}</Label>)}
+      {(!collapsible || expanded) && children}
     </View>
   );
 }
@@ -192,22 +203,32 @@ export function Choices<T extends string>({
   onChange: (v: T) => void;
 }) {
   const p = usePalette();
+  const [open, setOpen] = useState(false);
   return (
     <View style={{ gap: 6 }}>
       <Label>{label}</Label>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={label + "：" + value}
+        accessibilityState={{ expanded: open }} onPress={() => setOpen(true)}
+        style={{ minHeight: 48, padding: 12, borderRadius: 12, backgroundColor: p.bg, flexDirection: "row", justifyContent: "space-between" }}>
+        <Text style={{ color: p.text }}>{value}</Text><Text style={{ color: p.accent }}>⌄</Text>
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: "#0007", justifyContent: "center", padding: 24 }}>
+          <Pressable accessibilityLabel="关闭选项" accessibilityRole="button" onPress={() => setOpen(false)} style={StyleSheet.absoluteFill} />
+          <View accessibilityViewIsModal style={{ maxHeight: "75%", width: "100%", maxWidth: 480, alignSelf: "center", borderRadius: 22, padding: 18, backgroundColor: p.card, gap: 12 }}>
+          <Label large>{label}</Label>
+          <ScrollView keyboardShouldPersistTaps="handled">
         {options.map((x) => (
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ selected: x === value }}
             accessibilityLabel={label + "：" + x}
             key={x}
-            onPress={() => onChange(x)}
+            onPress={() => { onChange(x); setOpen(false); }}
             style={{
               minHeight: 44,
               padding: 11,
-              borderWidth: 1,
-              borderColor: p.border,
+              marginBottom: 4,
               borderRadius: 10,
               backgroundColor: x === value ? p.accent : p.card,
             }}
@@ -222,11 +243,15 @@ export function Choices<T extends string>({
                     : p.text,
               }}
             >
-              {x}
+              {x}{x === value ? "  ✓" : ""}
             </Text>
           </Pressable>
         ))}
-      </View>
+          </ScrollView>
+          <Button title="关闭" subtle onPress={() => setOpen(false)} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -285,6 +310,7 @@ export function Screen({
 }) {
   const p = usePalette();
   const { ready, error, raw, reload } = useData();
+  const pathname = usePathname();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: p.bg }}>
       <ScrollView
@@ -299,12 +325,13 @@ export function Screen({
         }}
       >
         <View style={{ gap: 6 }}>
-          <Label large>Myconcert</Label>
-          <Label muted>本地模式 · {title}</Label>
+          <Label muted>MYCONCERT · 我的现场</Label>
+          <Label large>{title}</Label>
         </View>
         {back && (
           <Button
             title="返回"
+            subtle
             onPress={() => {
               if (router.canGoBack()) router.back();
               else router.replace("/");
@@ -345,6 +372,7 @@ export function Screen({
             key={path}
             accessibilityRole="button"
             accessibilityLabel={"导航：" + label}
+            accessibilityState={{ selected: pathname === path }}
             onPress={() => router.navigate(path as Href)}
             style={{
               flex: 1,
@@ -353,14 +381,15 @@ export function Screen({
               alignItems: "center",
             }}
           >
-            <Text style={{ color: p.text }}>{label}</Text>
+            <Text style={{ color: pathname === path ? p.accent : p.muted, fontWeight: pathname === path ? "700" : "400" }}>{label}</Text>
+            <View style={{ marginTop: 5, width: 16, height: 3, borderRadius: 2, backgroundColor: pathname === path ? p.accent : "transparent" }} />
           </Pressable>
         ))}
       </View>
     </SafeAreaView>
   );
 }
-export function Rows({ events }: { events: ConcertEvent[] }) {
+export function Rows({ events, onSelect }: { events: ConcertEvent[]; onSelect?: (event: ConcertEvent) => void }) {
   const p = usePalette();
   const { clock } = useData();
   return (
@@ -373,9 +402,7 @@ export function Rows({ events }: { events: ConcertEvent[] }) {
           key={e.id}
           accessibilityRole="button"
           accessibilityLabel={"查看 " + e.title}
-          onPress={() =>
-            router.push({ pathname: "/event/[id]", params: { id: e.id } })
-          }
+          onPress={() => onSelect ? onSelect(e) : router.push({ pathname: "/event/[id]", params: { id: e.id } })}
           style={{
             minHeight: 72,
             borderLeftWidth: 5,

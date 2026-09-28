@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Image } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import { useData } from "@/data/context";
@@ -13,7 +14,11 @@ import {
   statuses,
   validateEvent,
 } from "@/domain/rules";
-import { cancelReminders } from "@/services/device";
+import { cancelReminders, pickMedia } from "@/services/device";
+import { eventPoster } from "@/domain/event-feed";
+import { DateTimeField } from "@/components/date-time-field";
+import { StarRating } from "@/components/star-rating";
+import { CityField } from "@/components/city-field";
 
 export default function Edit() {
   const { id, day } = useLocalSearchParams<{ id?: string; day?: string }>();
@@ -70,13 +75,12 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
     draft.saleAt ? localInput(draft.saleAt) : "",
   );
   const [price, setPrice] = useState(((draft.price || 0) / 100).toFixed(2));
-  const [rating, setRating] = useState(
-    draft.rating === undefined ? "" : String(draft.rating),
-  );
+  const [rating, setRating] = useState(draft.rating);
   const [tags, setTags] = useState(draft.tags.join(", "));
   const [advanced, setAdvanced] = useState(false);
   const [collision, setCollision] = useState<ConcertEvent | null>(null);
   const [warning, setWarning] = useState("");
+  const poster = eventPoster(draft);
   const patch = <K extends keyof ConcertEvent>(
     key: K,
     value: ConcertEvent[K],
@@ -140,7 +144,7 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
       endAt: parseLocal(end),
       saleAt: sale ? parseLocal(sale) : undefined,
       price: parseMoney(price || "0"),
-      rating: rating === "" ? undefined : Number(rating),
+      rating,
       tags: tags
         .split(/[,，]/)
         .map((t) => t.trim())
@@ -158,6 +162,13 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
   return (
     <>
       <Card title="基本行程">
+        {poster && <Image source={{ uri: poster.uri }} accessibilityLabel="演出海报预览"
+          style={{ width: "100%", height: 220, borderRadius: 12 }} resizeMode="contain" />}
+        <Button subtle title={poster ? "更换海报" : "添加演出海报"} onPress={async () => {
+          const media = await pickMedia("海报");
+          if (media) patch("media", [media, ...(draft.media || []).filter((m) => m.role !== "海报")]);
+        }} />
+        {poster && <Button subtle title="移除海报" onPress={() => patch("media", (draft.media || []).filter((m) => m.role !== "海报"))} />}
         {field("演出名称 *", "title")}
         {field("艺人 / 阵容", "artists")}
         <Choices
@@ -166,10 +177,11 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
           options={eventTypes}
           onChange={(v) => patch("type", v)}
         />
-        {field("城市", "city")}
+        <CityField value={draft.city} recorded={[...new Set(data.events.map((event) => event.city.trim()).filter(Boolean))]}
+          onChange={(value) => patch("city", value)} />
         {field("场馆", "venue")}
-        <Label muted>时间使用本机时区，格式：2026-10-01T19:30</Label>
-        <Field
+        <Label muted>点按日期选择，时刻按本机时区填写。</Label>
+        <DateTimeField
           label="开始时间 *"
           value={start}
           onChange={(v) => {
@@ -177,7 +189,7 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
             setCollision(null);
           }}
         />
-        <Field
+        <DateTimeField
           label="结束时间 *"
           value={end}
           onChange={(v) => {
@@ -193,6 +205,7 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
         />
       </Card>
       <Button
+        subtle
         title={advanced ? "收起票务与记录" : "展开票务与记录"}
         onPress={() => setAdvanced((v) => !v)}
       />
@@ -207,9 +220,10 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
             }}
           />
           {field("币种（CNY / USD / EUR 等）", "currency")}
-          <Field
+          <DateTimeField
             label="开票时间（可空）"
             value={sale}
+            optional
             onChange={(v) => {
               setSale(v);
               setCollision(null);
@@ -228,11 +242,10 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
               setCollision(null);
             }}
           />
-          <Field
-            label="评分（0—5，可空）"
+          <StarRating
             value={rating}
-            onChange={(v) => {
-              setRating(v);
+            onChange={(value) => {
+              setRating(value);
               setCollision(null);
             }}
           />

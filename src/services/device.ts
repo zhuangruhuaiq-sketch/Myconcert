@@ -3,7 +3,6 @@ import * as Images from "expo-image-picker";
 import * as FS from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as Calendar from "expo-calendar/legacy";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { randomUUID } from "expo-crypto";
 import { Backup, ConcertEvent, Media } from "@/domain/rules";
@@ -32,7 +31,7 @@ export async function pickMedia(role: string): Promise<Media | null> {
   if (!permission.granted)
     throw new Error("未获得相册权限，请在系统设置允许后重试");
   const result = await Images.launchImageLibraryAsync({
-    mediaTypes: ["images", "videos"],
+    mediaTypes: role === "海报" ? ["images"] : ["images", "videos"],
     quality: 0.8,
   });
   if (result.canceled) return null;
@@ -115,18 +114,20 @@ export async function systemCalendar(e: ConcertEvent) {
     : "已返回系统日历，请在日历中确认保存结果";
 }
 export async function cancelReminders(eventId: string) {
-  const all = await Notifications.getAllScheduledNotificationsAsync();
+  const notifications = await import("expo-notifications");
+  const all = await notifications.getAllScheduledNotificationsAsync();
   for (const n of all)
     if (n.content.data?.eventId === eventId)
-      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      await notifications.cancelScheduledNotificationAsync(n.identifier);
 }
 export async function activateReminders(e: ConcertEvent) {
+  const notifications = await import("expo-notifications");
   if (Platform.OS === "android")
-    await Notifications.setNotificationChannelAsync("myconcert", {
+    await notifications.setNotificationChannelAsync("myconcert", {
       name: "Myconcert 行程提醒",
-      importance: Notifications.AndroidImportance.DEFAULT,
+      importance: notifications.AndroidImportance.DEFAULT,
     });
-  const permission = await Notifications.requestPermissionsAsync();
+  const permission = await notifications.requestPermissionsAsync();
   if (!permission.granted)
     throw new Error("提醒设置已保存，但通知权限未授权；允许权限后请重新启用");
   await cancelReminders(e.id);
@@ -134,7 +135,7 @@ export async function activateReminders(e: ConcertEvent) {
   try {
     for (const reminder of e.reminders || []) {
       if (+new Date(reminder.at) <= Date.now()) continue;
-      await Notifications.scheduleNotificationAsync({
+      await notifications.scheduleNotificationAsync({
         identifier: e.id + ":" + reminder.id,
         content: {
           title: "Myconcert · " + reminder.label,
@@ -145,7 +146,7 @@ export async function activateReminders(e: ConcertEvent) {
           },
         },
         trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          type: notifications.SchedulableTriggerInputTypes.DATE,
           date: new Date(reminder.at),
           channelId: "myconcert",
         },

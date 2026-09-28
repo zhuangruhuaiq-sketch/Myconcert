@@ -110,7 +110,7 @@ export default function Detail() {
           <Label>{message}</Label>
         </Card>
       )}
-      <Card title={"费用 · " + money(totals([e]), e.currency)}>
+      <Card collapsible title={"费用 · " + money(totals([e]), e.currency)}>
         <Label>票价：{money(e.price, e.currency)}</Label>
         {e.expenses.map((x) => (
           <View key={x.id} style={{ gap: 6 }}>
@@ -162,7 +162,7 @@ export default function Detail() {
           }}
         />
       </Card>
-      <Card title="赴约准备">
+      <Card collapsible title={"赴约准备 · " + e.preparation.filter((x) => x.done).length + "/" + e.preparation.length}>
         {e.preparation.map((x) => (
           <View key={x.id} style={{ gap: 6 }}>
             <Button
@@ -219,7 +219,7 @@ export default function Detail() {
           }}
         />
       </Card>
-      <Card title="本地附件">
+      <Card collapsible title={"本地附件 · " + (e.media || []).length}>
         <Choices
           label="附件用途"
           value={role}
@@ -278,7 +278,7 @@ export default function Detail() {
         ))}
         <Label muted>OCR 尚未接入。可查看票根后点击“编辑演出”手动补全。</Label>
       </Card>
-      <Card title="提醒">
+      <Card collapsible title={"提醒 · " + (e.reminders || []).length}>
         {(e.reminders || []).map((r) => (
           <View key={r.id} style={{ gap: 6 }}>
             <Label>

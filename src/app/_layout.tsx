@@ -3,12 +3,13 @@ import { StatusBar } from "expo-status-bar";
 import { DataProvider, useData } from "@/data/context";
 import { usePalette } from "@/components/ui";
 import { useNotificationRouting } from "@/services/notification-routing";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 export default function Layout() {
   return (
-    <DataProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}><DataProvider>
       <Navigation />
-    </DataProvider>
+    </DataProvider></GestureHandlerRootView>
   );
 }
 function Navigation() {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useData } from "@/data/context";
-import { Button, Card, Field, Rows, Screen } from "@/components/ui";
+import { Button, Card, Choices, Field, Rows, Screen } from "@/components/ui";
+import { statuses } from "@/domain/rules";
 import { emptyFilters, FilterFields, filterEvents } from "@/components/filters";
 export default function Search() {
   const { data } = useData();
@@ -17,20 +18,15 @@ export default function Search() {
           value={filters.query}
           onChange={(query) => setFilters((f) => ({ ...f, query }))}
         />
+        <Choices label="演出状态" value={filters.status} options={["全部", ...statuses]}
+          onChange={(status) => setFilters((f) => ({ ...f, status }))} />
         <Button
-          title="待开票"
-          onPress={() => setFilters({ ...emptyFilters, status: "待开票" })}
-        />
-        <Button
-          title="已观看"
-          onPress={() => setFilters({ ...emptyFilters, status: "已观看" })}
-        />
-        <Button
+          subtle
           title={expanded ? "收起筛选" : "更多筛选"}
           onPress={() => setExpanded((v) => !v)}
         />
         {expanded && <FilterFields value={filters} onChange={setFilters} />}
-        <Button title="清除筛选" onPress={() => setFilters(emptyFilters)} />
+        {JSON.stringify(filters) !== JSON.stringify(emptyFilters) && <Button subtle title="清除筛选" onPress={() => setFilters(emptyFilters)} />}
       </Card>
       <Card title={"找到 " + events.length + " 场"}>
         <Rows events={events} />

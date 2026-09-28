@@ -31,8 +31,9 @@ export async function exportFile(name: string, content: string, mime: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 export async function pickMedia(role: string): Promise<Media | null> {
-  const file = await choose("image/*,video/*");
+  const file = await choose(role === "海报" ? "image/*" : "image/*,video/*");
   if (!file) return null;
+  if (role === "海报" && !file.type.startsWith("image/")) throw new Error("海报请选择图片文件");
   if (file.size > 20 * 1024 * 1024)
     throw new Error("浏览器附件限 20 MB，请压缩后重试");
   return {

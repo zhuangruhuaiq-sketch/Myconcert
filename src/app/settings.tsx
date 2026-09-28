@@ -27,6 +27,7 @@ import {
 export default function Settings() {
   const { data, change, busy } = useData();
   const [format, setFormat] = useState<Format>("json");
+  const [exportFormat, setExportFormat] = useState<Format>("json");
   const [input, setInput] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [policy, setPolicy] = useState<"skip" | "replace">("skip");
@@ -73,9 +74,8 @@ export default function Settings() {
           JSON 包含设置与附件内容，适合完整备份。CSV 包含演出记录和附件；ICS
           只交换公开行程，不含订单、取票码及详细地址。
         </Label>
-        <Button title="下载 JSON 完整备份" onPress={() => download("json")} />
-        <Button title="下载 CSV" onPress={() => download("csv")} />
-        <Button title="下载全部 ICS 日历" onPress={() => download("ics")} />
+        <Choices label="导出格式" value={exportFormat} options={["json", "csv", "ics"]} onChange={setExportFormat} />
+        <Button title={"导出 " + exportFormat.toUpperCase()} onPress={() => download(exportFormat)} />
       </Card>
       {!!message && (
         <Card>
@@ -193,8 +193,8 @@ export default function Settings() {
           本地模式：尚未实现账户登录与云同步，填写密钥也不会自动启用。记录默认仅在本机，备份文件由你自行保管。
         </Label>
         <Label>
-          OCR、公开链接解析、地图 SDK
-          尚未接入。可通过“添加演出”手动填写；票根附件可在详情查看，地图页提供城市列表。
+          OCR、公开链接解析尚未接入。地图内置世界地理数据、中国城市行政区域和常用城市坐标；在线街道细节来自 OpenStreetMap，未收录城市通过 Photon 查询。海外城市边界通过 Overpass 按城市名称和城市中心坐标查询并缓存，不发送演出内容或手机定位。
+          查询仅发送城市名，不发送演出详情、备注或附件；无需定位权限。网络不可用时仍可浏览内置底图和城市档案。
         </Label>
         <Label>
           原生小组件及分享图片尚未实现。详情支持 myconcert://event/演出ID
