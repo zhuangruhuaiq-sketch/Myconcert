@@ -5,6 +5,7 @@ import * as Sharing from "expo-sharing";
 import * as Calendar from "expo-calendar/legacy";
 import { Platform } from "react-native";
 import { randomUUID } from "expo-crypto";
+import { isRunningInExpoGo } from "expo";
 import { Backup, ConcertEvent, Media } from "@/domain/rules";
 
 export async function readImport() {
@@ -51,6 +52,20 @@ export async function pickMedia(role: string): Promise<Media | null> {
     kind: asset.type === "video" ? "video" : "image",
   };
 }
+export async function saveTicketPoster(url: string): Promise<Media> {
+  const id = randomUUID();
+  const dir = FS.documentDirectory + "myconcert-media/";
+  const extension = /\.(png|webp)(?:\?|$)/i.exec(url)?.[1]?.toLowerCase() || "jpg";
+  await FS.makeDirectoryAsync(dir, { intermediates: true });
+  const response = await FS.downloadAsync(url, dir + id + "." + extension);
+  const info = await FS.getInfoAsync(response.uri);
+  const mime = response.headers["Content-Type"] || response.headers["content-type"];
+  if (response.status !== 200 || (mime && !mime.startsWith("image/")) || (info.exists && info.size > 20 * 1024 * 1024)) {
+    await FS.deleteAsync(response.uri, { idempotent: true });
+    throw new Error("海报下载失败或超过 20 MB");
+  }
+  return { id, uri: response.uri, name: "演出海报." + extension, kind: "image", role: "海报" };
+}
 export async function portableBackup(backup: Backup): Promise<Backup> {
   return {
     ...backup,
@@ -67,7 +82,7 @@ export async function portableBackup(backup: Backup): Promise<Backup> {
               ...m,
               uri:
                 "data:" +
-                (m.kind === "video" ? "video/mp4" : "image/jpeg") +
+                (m.kind === "video" ? "video/mp4" : /\.png$/i.test(m.name) ? "image/png" : /\.webp$/i.test(m.name) ? "image/webp" : "image/jpeg") +
                 ";base64," +
                 data,
             };
@@ -90,7 +105,7 @@ export async function materialize(
           if (!m.uri.startsWith("data:"))
             throw new Error("导入附件必须包含文件内容，不能引用设备路径；请从原设备导出完整备份");
           const uri =
-            dir + randomUUID() + (m.kind === "video" ? ".mp4" : ".jpg");
+            dir + randomUUID() + (m.kind === "video" ? ".mp4" : /^data:image\/(png|webp);/i.test(m.uri) ? "." + m.uri.match(/^data:image\/(png|webp);/i)![1].toLowerCase() : ".jpg");
           await FS.writeAsStringAsync(
             uri,
             m.uri.slice(m.uri.indexOf(",") + 1),
@@ -114,6 +129,7 @@ export async function systemCalendar(e: ConcertEvent) {
     : "已返回系统日历，请在日历中确认保存结果";
 }
 export async function cancelReminders(eventId: string) {
+  if (Platform.OS === "android" && isRunningInExpoGo()) return;
   const notifications = await import("expo-notifications");
   const all = await notifications.getAllScheduledNotificationsAsync();
   for (const n of all)
@@ -121,6 +137,8 @@ export async function cancelReminders(eventId: string) {
       await notifications.cancelScheduledNotificationAsync(n.identifier);
 }
 export async function activateReminders(e: ConcertEvent) {
+  if (Platform.OS === "android" && isRunningInExpoGo())
+    throw new Error("Android Expo Go 当前无法加载提醒模块，请使用开发构建启用系统提醒");
   const notifications = await import("expo-notifications");
   if (Platform.OS === "android")
     await notifications.setNotificationChannelAsync("myconcert", {

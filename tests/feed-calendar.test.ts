@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { eventFeed, eventPoster } from "../src/domain/event-feed";
-import { calendarPeriod, shiftPeriod } from "../src/domain/calendar";
+import { calendarPeriod, nextConcert, shiftPeriod } from "../src/domain/calendar";
 import { ConcertEvent, validateEvent } from "../src/domain/rules";
 import { toCsv, importPreview } from "../src/domain/exchange";
 import { mapDocument } from "../src/domain/map-document";
@@ -46,6 +46,17 @@ test("calendar periods stay contiguous through year changes, leap day and week b
   const current = calendarPeriod("2026-12-31", true);
   const next = calendarPeriod(shiftPeriod("2026-12-31", true, 1), true);
   assert.equal(+current.end, +next.start);
+});
+
+test("calendar finds the nearest unfinished show regardless of ticket status", () => {
+  const now = Date.parse("2026-09-30T09:00:00Z");
+  const far = event("far", "2026-10-10T19:00:00Z");
+  const want = { ...event("want", "2026-10-01T19:00:00Z"), status: "想看" as const };
+  const sale = { ...event("sale", "2026-10-02T19:00:00Z"), status: "待开票" as const };
+  const cancelled = { ...event("cancelled", "2026-09-30T18:00:00Z"), status: "已取消" as const };
+  assert.equal(nextConcert([far, sale, want, cancelled], now)?.id, "want");
+  assert.equal(nextConcert([far, sale, cancelled], now)?.id, "sale");
+  assert.equal(nextConcert([cancelled], now), undefined);
 });
 
 test("map is self-contained and known cities do not depend on network geocoding", () => {

@@ -8,6 +8,7 @@ import { eventFeed, eventPoster } from "@/domain/event-feed";
 
 function EventCard({ event }: { event: ConcertEvent }) {
   const p = usePalette();
+  const { data } = useData();
   const poster = eventPoster(event);
   const [failedUri, setFailedUri] = useState("");
   return <Pressable accessibilityRole="button" accessibilityLabel={"查看 " + event.title}
@@ -25,7 +26,7 @@ function EventCard({ event }: { event: ConcertEvent }) {
       <Text style={{ color: p.muted, fontSize: 13 }} numberOfLines={2}>{[event.city, event.venue].filter(Boolean).join(" · ") || "地点待补充"}</Text>
       <Text style={{ color: p.text, fontSize: 13 }} numberOfLines={2}>{event.artists || "艺人待补充"}</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 3 }}>
-        <Text style={{ color: p.accent, fontWeight: "700" }}>{event.price === undefined ? "票价待补充" : money(event.price, event.currency)}</Text>
+        {!data.preferences.hidePrice && <Text style={{ color: p.accent, fontWeight: "700" }}>{event.price === undefined ? "票价待补充" : money(event.price, event.currency)}</Text>}
         <Text style={{ color: p.muted, fontSize: 12 }}>{event.status}</Text>
       </View>
     </View>

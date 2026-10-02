@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Image } from "react-native";
+import { Image, Platform } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import { useData } from "@/data/context";
 import { Button, Card, Choices, Field, Label, Screen } from "@/components/ui";
 import {
   ConcertEvent,
+  FoundShow,
   conflictsFor,
   eventTypes,
   localInput,
@@ -14,32 +15,44 @@ import {
   statuses,
   validateEvent,
 } from "@/domain/rules";
-import { cancelReminders, pickMedia } from "@/services/device";
+import { cancelReminders, pickMedia, saveTicketPoster } from "@/services/device";
+import { extractTicketUrl, fetchTicketPage } from "@/domain/ticket-link";
 import { eventPoster } from "@/domain/event-feed";
 import { DateTimeField } from "@/components/date-time-field";
 import { StarRating } from "@/components/star-rating";
 import { CityField } from "@/components/city-field";
 
 export default function Edit() {
-  const { id, day } = useLocalSearchParams<{ id?: string; day?: string }>();
+  const { id, day, found: foundParam } = useLocalSearchParams<{ id?: string; day?: string; found?: string }>();
   const { data, ready } = useData();
   const event = data.events.find((e) => e.id === id);
+  let found: FoundShow | undefined;
+  if (foundParam) {
+    try {
+      const candidate: unknown = JSON.parse(foundParam);
+      if (candidate && typeof candidate === "object" &&
+        ["title", "artists", "city", "venue", "startAt", "platform", "url"].every((key) => typeof (candidate as Record<string, unknown>)[key] === "string") &&
+        Number.isFinite(Date.parse((candidate as FoundShow).startAt)) && /^https:\/\//.test((candidate as FoundShow).url))
+        found = candidate as FoundShow;
+    }
+    catch { /* Invalid shared route data leaves the standard form usable. */ }
+  }
   return (
-    <Screen title={id ? "编辑演出" : "添加演出"} back>
+    <Screen title={id ? "编辑演出" : "添加演出"} back={!!id}>
       {ready &&
         (id && !event ? (
           <Label>记录不存在或已删除。</Label>
         ) : (
-          <Form key={id || day || "new"} initial={event} day={day} />
+          <Form key={id || day || foundParam || "new"} initial={event} day={day} found={found} />
         ))}
     </Screen>
   );
 }
-function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
+function Form({ initial, day, found }: { initial?: ConcertEvent; day?: string; found?: FoundShow }) {
   const { data, change, busy } = useData();
   const [draft, setDraft] = useState(() => {
     const start =
-      initial?.startAt ||
+      initial?.startAt || found?.startAt ||
       (day
         ? new Date(day + "T19:00:00").toISOString()
         : new Date(Date.now() + 86400000).toISOString());
@@ -48,16 +61,16 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
       initial ||
       ({
         id: randomUUID(),
-        title: "",
-        artists: "",
-        city: "",
-        venue: "",
-        type: "演唱会",
+        title: found?.title || "",
+        artists: found?.artists || "",
+        city: found?.city || data.preferences.defaultCity,
+        venue: found?.venue || "",
+        type: "其他",
         status: "待观看",
         startAt: start,
         endAt: new Date(+new Date(start) + 7200000).toISOString(),
         price: 0,
-        currency: "CNY",
+        currency: data.preferences.defaultCurrency,
         color: "#9b7cff",
         tags: [],
         expenses: [],
@@ -66,6 +79,8 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
         reminders: [],
         createdAt: now,
         updatedAt: now,
+        platform: found?.platform,
+        sourceUrl: found?.url,
       } as ConcertEvent)
     );
   });
@@ -80,6 +95,7 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
   const [advanced, setAdvanced] = useState(false);
   const [collision, setCollision] = useState<ConcertEvent | null>(null);
   const [warning, setWarning] = useState("");
+  const [linkMessage, setLinkMessage] = useState("");
   const poster = eventPoster(draft);
   const patch = <K extends keyof ConcertEvent>(
     key: K,
@@ -151,6 +167,13 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
         .filter(Boolean),
       updatedAt: new Date().toISOString(),
     });
+    if (found && data.events.some((event) => event.id !== next.id && (
+      event.sourceUrl === next.sourceUrl ||
+      (event.startAt === next.startAt && event.city === next.city && event.venue === next.venue && event.artists === next.artists)
+    ))) {
+      setWarning("这场演出已在记录中，无需重复收藏。");
+      return;
+    }
     const conflicts = conflictsFor(next, data.events);
     if (conflicts.length) {
       setCollision(next);
@@ -159,8 +182,48 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
     }
     await persist(next);
   }
+  async function fillFromLink() {
+    const url = extractTicketUrl(draft.sourceUrl || "");
+    patch("sourceUrl", url);
+    const details = await fetchTicketPage(url, Platform.OS !== "web");
+    let media = null;
+    if (details.poster) {
+      try { media = await saveTicketPoster(details.poster); }
+      catch { /* Keep the other parsed fields when the image host rejects a download. */ }
+    }
+    setDraft((previous) => ({
+      ...previous,
+      sourceUrl: url,
+      title: details.title || previous.title,
+      artists: details.artists || previous.artists,
+      city: details.city || previous.city,
+      venue: details.venue || previous.venue,
+      type: details.type || previous.type,
+      platform: details.platform || previous.platform,
+      media: media ? [media, ...(previous.media || []).filter((item) => item.role !== "海报")] : previous.media,
+    }));
+    if (details.start) {
+      setStart(details.start);
+      setEnd(localInput(new Date(+new Date(details.start) + 7200000)));
+    }
+    setCollision(null);
+    const filled = [
+      details.title && "名称", details.artists && "艺人", details.city && "城市",
+      details.venue && "场馆", details.start && "开始时间", media && "海报",
+    ].filter(Boolean).join("、");
+    setLinkMessage(`已填入：${filled}。请下滑核对。${details.start ? "" : "演出时间请手动选择。"}${details.poster && !media ? "海报下载失败，可手动添加。" : ""}`);
+  }
   return (
     <>
+      <Card title="从票务链接填写">
+        <Field label="演出分享内容或详情链接" value={draft.sourceUrl || ""} onChange={(value) => {
+          patch("sourceUrl", value);
+          setLinkMessage("");
+        }} multiline />
+        <Button title="解析并填写" onPress={fillFromLink} />
+        {!!linkMessage && <Label>{linkMessage}</Label>}
+        <Label muted>支持大麦、秀动、猫眼等公开详情页，并尝试读取纷玩岛、票星球的公开资料。多场次、时间待定或平台限制访问时，请手动补全。</Label>
+      </Card>
       <Card title="基本行程">
         {poster && <Image source={{ uri: poster.uri }} accessibilityLabel="演出海报预览"
           style={{ width: "100%", height: 220, borderRadius: 12 }} resizeMode="contain" />}
@@ -250,10 +313,6 @@ function Form({ initial, day }: { initial?: ConcertEvent; day?: string }) {
             }}
           />
           {field("观后感", "review", true)}
-          {field("公开演出链接", "sourceUrl")}
-          <Label muted>
-            链接会保存到档案；本版本尚未接入解析服务，请手动补全信息。
-          </Label>
           {field("卡片配色（#RRGGBB）", "color")}
         </Card>
       )}

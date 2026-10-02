@@ -4,21 +4,23 @@ import { Pressable } from "react-native-gesture-handler";
 import { router } from "expo-router";
 import { useData } from "@/data/context";
 import { Button, Card, Choices, Label, Rows, Screen, usePalette } from "@/components/ui";
-import { dayKey, onDay } from "@/domain/rules";
-import { calendarPeriod, shiftPeriod } from "@/domain/calendar";
+import { calendarViews, dayKey, onDay } from "@/domain/rules";
+import { calendarPeriod, nextConcert, shiftPeriod } from "@/domain/calendar";
 import { SwipePeriod } from "@/components/swipe-period";
 
 export default function Calendar() {
   const { data, clock } = useData();
   const p = usePalette();
   const [day, setDay] = useState(() => dayKey(new Date()));
-  const [mode, setMode] = useState("月历");
+  const [selection, setSelection] = useState<{ defaultView: string; value: string }>();
+  const mode = selection?.defaultView === data.preferences.calendarView
+    ? selection.value : data.preferences.calendarView;
   const weekly = mode === "周视图";
   const grid = mode === "月历" || weekly;
   const period = calendarPeriod(day, weekly);
   const periodKey = `${mode}:${dayKey(period.start)}`;
   const events = [...data.events].sort((a, b) => a.startAt.localeCompare(b.startAt));
-  const next = events.find((e) => +new Date(e.endAt) > clock && !["已取消", "已观看", "想看", "待开票"].includes(e.status));
+  const next = nextConcert(events, clock);
   const sale = [...events].filter((e) => e.status === "待开票" && e.saleAt && +new Date(e.saleAt) > clock).sort((a, b) => a.saleAt!.localeCompare(b.saleAt!))[0];
   function move(direction: number) { setDay((current) => shiftPeriod(current, weekly, direction)); }
   const countdown = (iso: string) => {
@@ -60,7 +62,8 @@ export default function Calendar() {
         <Button subtle title="查看待开票演出" onPress={() => router.push({ pathname: "/event/[id]", params: { id: sale.id } })} /></> : <Label muted>暂无未来开票提醒</Label>}
     </Card>
     <Card>
-      <Choices label="显示方式" value={mode} options={["月历", "周视图", "日程列表", "时间轴"]} onChange={setMode} />
+      <Choices label="显示方式" value={mode} options={calendarViews}
+        onChange={(value) => setSelection({ defaultView: data.preferences.calendarView, value })} />
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <View accessibilityRole="adjustable" accessibilityLabel="切换日历周期"
           accessibilityActions={[{ name: "increment", label: "下一个周期" }, { name: "decrement", label: "上一个周期" }]}

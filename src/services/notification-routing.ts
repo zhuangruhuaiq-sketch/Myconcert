@@ -1,11 +1,11 @@
 import { useEffect } from "react";
-import Constants from "expo-constants";
+import { isRunningInExpoGo } from "expo";
 import { router } from "expo-router";
 import type * as Notifications from "expo-notifications";
 
 export function useNotificationRouting() {
   useEffect(() => {
-    if (Constants.appOwnership === "expo") return;
+    if (isRunningInExpoGo()) return;
 
     let active = true;
     let removeSubscription: (() => void) | undefined;

@@ -1,9 +1,10 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { DataProvider, useData } from "@/data/context";
-import { usePalette } from "@/components/ui";
+import { BottomTabs, usePalette } from "@/components/ui";
 import { useNotificationRouting } from "@/services/notification-routing";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { View } from "react-native";
 
 export default function Layout() {
   return (
@@ -17,14 +18,19 @@ function Navigation() {
   const { dark } = useData();
   const p = usePalette();
   return (
-    <>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: p.bg },
-        }}
-      />
+    <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <View style={{ flex: 1 }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: p.bg },
+            animation: "fade",
+            animationDuration: 180,
+          }}
+        />
+      </View>
+      <BottomTabs />
       <StatusBar style={dark ? "light" : "dark"} />
-    </>
+    </View>
   );
 }

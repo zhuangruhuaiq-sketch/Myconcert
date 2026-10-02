@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { AppState, useColorScheme } from "react-native";
-import { Backup, defaults } from "@/domain/rules";
+import { Backup, defaults, emptyDiscovery } from "@/domain/rules";
 import { storage } from "./storage";
 import { RecoveryError, repository } from "./repository";
 import { demoEvents } from "./seed";
@@ -23,6 +23,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     version: 2,
     events: [],
     preferences: defaults,
+    discovery: emptyDiscovery(),
   });
   const [ready, setReady] = useState(false);
   const [pending, setPending] = useState(0);

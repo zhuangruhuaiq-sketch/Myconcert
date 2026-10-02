@@ -15,8 +15,8 @@ import { ConcertEvent } from "@/domain/rules";
 export const tabs = [
   ["/", "演出"],
   ["/calendar", "日历"],
-  ["/edit", "添加"],
   ["/search", "搜索"],
+  ["/edit", "添加"],
   ["/stats", "统计"],
   ["/cities", "地图"],
   ["/settings", "我的"],
@@ -310,10 +310,10 @@ export function Screen({
 }) {
   const p = usePalette();
   const { ready, error, raw, reload } = useData();
-  const pathname = usePathname();
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: p.bg }}>
+    <SafeAreaView edges={["top", "left", "right"]} style={{ flex: 1, backgroundColor: p.bg }}>
       <ScrollView
+        style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           width: "100%",
@@ -359,30 +359,35 @@ export function Screen({
           children
         )}
       </ScrollView>
-      <View
-        style={{
-          flexDirection: "row",
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderColor: p.border,
-          backgroundColor: p.card,
-        }}
-      >
+    </SafeAreaView>
+  );
+}
+export function BottomTabs() {
+  const p = usePalette();
+  const pathname = usePathname();
+  if (pathname === "/platform") return null;
+  return (
+    <SafeAreaView edges={["bottom"]} style={{ backgroundColor: p.card }}>
+      <View style={{ flexDirection: "row", borderTopWidth: StyleSheet.hairlineWidth, borderColor: p.border }}>
         {tabs.map(([path, label]) => (
           <Pressable
             key={path}
             accessibilityRole="button"
-            accessibilityLabel={"导航：" + label}
+            accessibilityLabel={path === "/edit" ? "添加演出" : "导航：" + label}
             accessibilityState={{ selected: pathname === path }}
-            onPress={() => router.navigate(path as Href)}
-            style={{
-              flex: 1,
-              minHeight: 54,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
+            onPress={() => { if (pathname !== path) router.navigate(path as Href); }}
+            style={{ flex: 1, minHeight: 60, justifyContent: "center", alignItems: "center" }}
           >
-            <Text style={{ color: pathname === path ? p.accent : p.muted, fontWeight: pathname === path ? "700" : "400" }}>{label}</Text>
-            <View style={{ marginTop: 5, width: 16, height: 3, borderRadius: 2, backgroundColor: pathname === path ? p.accent : "transparent" }} />
+            {path === "/edit" ? (
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.accent, justifyContent: "center", alignItems: "center" }}>
+                <Text style={{ color: p.accent === "#bca6ff" ? "#221834" : "#fff", fontSize: 32, lineHeight: 38, fontWeight: "300" }}>+</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={{ color: pathname === path ? p.accent : p.muted, fontWeight: pathname === path ? "700" : "400" }}>{label}</Text>
+                <View style={{ marginTop: 5, width: 16, height: 3, borderRadius: 2, backgroundColor: pathname === path ? p.accent : "transparent" }} />
+              </>
+            )}
           </Pressable>
         ))}
       </View>

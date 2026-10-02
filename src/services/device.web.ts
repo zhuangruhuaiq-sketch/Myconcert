@@ -44,6 +44,14 @@ export async function pickMedia(role: string): Promise<Media | null> {
     role,
   };
 }
+export async function saveTicketPoster(url: string): Promise<Media> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("海报下载失败");
+  const file = await response.blob();
+  if (!file.type.startsWith("image/") || file.size > 20 * 1024 * 1024)
+    throw new Error("海报不是图片或超过 20 MB");
+  return { id: crypto.randomUUID(), uri: await dataUri(new File([file], "演出海报.jpg", { type: file.type })), name: "演出海报.jpg", kind: "image", role: "海报" };
+}
 export async function portableBackup(backup: Backup) {
   return backup;
 }

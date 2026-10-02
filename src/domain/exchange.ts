@@ -2,6 +2,7 @@ import {
   Backup,
   ConcertEvent,
   defaults,
+  emptyDiscovery,
   validateBackup,
   validateEvent,
 } from "./rules";
@@ -176,11 +177,13 @@ export type Preview = {
   events: ConcertEvent[];
   errors: string[];
   preferences?: Backup["preferences"];
+  discovery?: Backup["discovery"];
 };
 export function importPreview(input: string, format: Format): Preview {
   const errors: string[] = [];
   const candidates: unknown[] = [];
   let preferences: Backup["preferences"] | undefined;
+  let discovery: Backup["discovery"] | undefined;
   if (format === "json") {
     const parsed = JSON.parse(input);
     if (!Array.isArray(parsed) && parsed?.version !== 2)
@@ -194,6 +197,8 @@ export function importPreview(input: string, format: Format): Preview {
         events: [],
         preferences: parsed.preferences,
       }).preferences;
+    if (parsed.discovery)
+      discovery = validateBackup({ version: 2, events: [], discovery: parsed.discovery }).discovery;
   } else if (format === "csv") {
     const [headers, ...rows] = csvRows(input);
     if (!headers) throw new Error("CSV 文件为空");
@@ -286,7 +291,7 @@ export function importPreview(input: string, format: Format): Preview {
       errors.push("记录 " + (i + 1) + "：" + String(e));
     }
   });
-  return { events, errors, preferences };
+  return { events, errors, preferences, discovery };
 }
 export function mergeEvents(
   current: ConcertEvent[],
@@ -302,4 +307,5 @@ export const emptyBackup = (): Backup => ({
   version: 2,
   events: [],
   preferences: defaults,
+  discovery: emptyDiscovery(),
 });

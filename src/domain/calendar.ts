@@ -1,4 +1,9 @@
-import { dayKey } from "./rules";
+import { ConcertEvent, dayKey } from "./rules";
+
+export function nextConcert(events: ConcertEvent[], now: number) {
+  return events.filter((event) => !["已取消", "已观看"].includes(event.status) && Date.parse(event.endAt) > now)
+    .sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt))[0];
+}
 
 export function shiftPeriod(day: string, weekly: boolean, direction: number) {
   const date = new Date(day + "T12:00:00");

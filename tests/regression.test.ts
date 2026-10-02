@@ -104,6 +104,29 @@ test("validation rejects corrupt amounts, dates, types and restores optional leg
   assert.deepEqual(validateEvent({ ...event, tags: undefined }).tags, []);
   assert.throws(() => validateBackup({ ...backup, events: [event, event] }));
 });
+test("new preferences keep legacy defaults and survive validation", () => {
+  const legacy = validateBackup({ ...backup, preferences: { theme: "light" } }).preferences;
+  assert.equal(legacy.hidePrice, false);
+  assert.equal(legacy.defaultCity, "");
+  assert.equal(legacy.defaultCurrency, "CNY");
+  assert.equal(legacy.calendarView, "月历");
+  const saved = validateBackup({
+    ...backup,
+    preferences: {
+      theme: "light",
+      hidePrice: true,
+      defaultCity: " 北京 ",
+      defaultCurrency: "USD",
+      calendarView: "周视图",
+    },
+  }).preferences;
+  assert.equal(saved.hidePrice, true);
+  assert.equal(saved.defaultCity, "北京");
+  assert.equal(saved.defaultCurrency, "USD");
+  assert.equal(saved.calendarView, "周视图");
+  assert.throws(() => validateBackup({ ...backup, preferences: { theme: "light", hidePrice: "yes" } }));
+  assert.throws(() => validateBackup({ ...backup, preferences: { theme: "light", calendarView: "未知" } }));
+});
 test("portable JSON preserves settings and embedded media", () => {
   const e = {
     ...event,

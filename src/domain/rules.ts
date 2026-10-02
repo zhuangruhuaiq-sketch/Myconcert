@@ -58,13 +58,42 @@ export type ConcertEvent = {
   media?: Media[];
   reminders?: Reminder[];
 };
-export type Preferences = { theme: "system" | "light" | "dark" };
+export const calendarViews = ["月历", "周视图", "日程列表", "时间轴"] as const;
+export type Preferences = {
+  theme: "system" | "light" | "dark";
+  hidePrice: boolean;
+  defaultCity: string;
+  defaultCurrency: string;
+  calendarView: (typeof calendarViews)[number];
+};
+export type FoundShow = {
+  title: string;
+  artists: string;
+  city: string;
+  venue: string;
+  startAt: string;
+  platform: string;
+  url: string;
+};
+export type Discovery = {
+  following: string[];
+  results: FoundShow[];
+  lastSuccess: Record<string, string>;
+};
+export const emptyDiscovery = (): Discovery => ({ following: [], results: [], lastSuccess: {} });
 export type Backup = {
   version: 2;
   events: ConcertEvent[];
   preferences: Preferences;
+  discovery: Discovery;
 };
-export const defaults: Preferences = { theme: "system" };
+export const defaults: Preferences = {
+  theme: "system",
+  hidePrice: false,
+  defaultCity: "",
+  defaultCurrency: "CNY",
+  calendarView: "月历",
+};
 export const money = (amount = 0, currency = "CNY") =>
   `${currency === "CNY" ? "¥" : currency + " "}${(amount / 100).toFixed(2)}`;
 export function parseMoney(value: string) {
@@ -272,9 +301,42 @@ export function validateBackup(value: unknown): Backup {
   const p = v.preferences === undefined ? defaults : object(v.preferences);
   if (!["system", "light", "dark"].includes(String(p.theme)))
     throw new Error("主题设置无效");
+  if (p.hidePrice !== undefined && typeof p.hidePrice !== "boolean")
+    throw new Error("票价显示设置无效");
+  if (p.defaultCity !== undefined && (typeof p.defaultCity !== "string" || p.defaultCity.length > 60))
+    throw new Error("默认城市设置无效");
+  if (p.defaultCurrency !== undefined && (typeof p.defaultCurrency !== "string" || !/^[A-Z]{3}$/.test(p.defaultCurrency)))
+    throw new Error("默认币种设置无效");
+  if (p.calendarView !== undefined && !calendarViews.includes(p.calendarView as Preferences["calendarView"]))
+    throw new Error("日历视图设置无效");
+  const d = v.discovery === undefined ? emptyDiscovery() : object(v.discovery);
+  const following = array(d.following, "关注歌手").map((x) => text(x, "歌手"));
+  const results = array(d.results, "发现结果").map((x) => {
+    const item = object(x);
+    const url = text(item.url, "票务链接");
+    if (!/^https:\/\//i.test(url)) throw new Error("票务链接必须是 HTTPS");
+    return {
+      title: text(item.title, "演出名称"),
+      artists: text(item.artists, "艺人"),
+      city: text(item.city, "城市", true),
+      venue: text(item.venue, "场馆", true),
+      startAt: timestamp(item.startAt, "开演时间"),
+      platform: text(item.platform, "票务平台"),
+      url,
+    };
+  });
+  const lastSuccessRaw = d.lastSuccess === undefined ? {} : object(d.lastSuccess);
+  const lastSuccess = Object.fromEntries(Object.entries(lastSuccessRaw).map(([key, value]) => [key, timestamp(value, "上次成功时间")]));
   return {
     version: 2,
     events,
-    preferences: { theme: p.theme as Preferences["theme"] },
+    preferences: {
+      theme: p.theme as Preferences["theme"],
+      hidePrice: p.hidePrice === true,
+      defaultCity: (p.defaultCity as string | undefined)?.trim() || "",
+      defaultCurrency: (p.defaultCurrency as string | undefined) || "CNY",
+      calendarView: (p.calendarView as Preferences["calendarView"] | undefined) || "月历",
+    },
+    discovery: { following: [...new Set(following)], results, lastSuccess },
   };
 }

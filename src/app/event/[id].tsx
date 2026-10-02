@@ -3,6 +3,7 @@ import { Image, Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import { useData } from "@/data/context";
+import { eventPoster } from "@/domain/event-feed";
 import {
   Button,
   Card,
@@ -42,6 +43,7 @@ export default function Detail() {
   const [reminderAt, setReminderAt] = useState("");
   const [reminderName, setReminderName] = useState("演出提醒");
   const [reminderId, setReminderId] = useState("");
+  const [failedPoster, setFailedPoster] = useState("");
   async function update(fn: (current: ConcertEvent) => ConcertEvent) {
     await change((b) => {
       if (!b.events.some((x) => x.id === id)) throw new Error("记录已删除");
@@ -60,9 +62,15 @@ export default function Detail() {
       </Screen>
     );
   const conflicts = conflictsFor(e, data.events);
+  const poster = eventPoster(e);
   return (
     <Screen title="演出详情" back>
       <Card title={e.title}>
+        {poster && poster.uri !== failedPoster ? (
+          <Image source={{ uri: poster.uri }} accessibilityLabel={e.title + "海报"}
+            style={{ width: "100%", height: 300, borderRadius: 12 }} resizeMode="contain"
+            onError={() => setFailedPoster(poster.uri)} />
+        ) : poster ? <Label muted>海报无法读取</Label> : null}
         <Label>
           {e.artists} · {e.type} · {e.status}
         </Label>
