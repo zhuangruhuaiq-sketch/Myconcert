@@ -26,6 +26,19 @@ test("insights exclude plans from attendance, count zero ratings, split artists 
   assert.equal(insights([]).averageRating, undefined);
   assert.deepEqual(insights([]).spending, []);
 });
+
+test("city statistics merge names with and without 市 without changing records", () => {
+  const events = [
+    { ...base, id: "hangzhou", city: "杭州", venue: "同一场馆" },
+    { ...base, id: "hangzhoushi", city: " 杭州市 ", venue: "同一场馆" },
+    { ...base, id: "shanghai", city: "上海", venue: "另一场馆" },
+    { ...base, id: "yokkaichi", city: "四日市", venue: "海外场馆" },
+  ];
+  const summary = insights(events);
+  assert.deepEqual(summary.cities, [["杭州", 2], ["上海", 1], ["四日市", 1]]);
+  assert.deepEqual(summary.venues, [["杭州 · 同一场馆", 2], ["上海 · 另一场馆", 1], ["四日市 · 海外场馆", 1]]);
+  assert.equal(events[1].city, " 杭州市 ");
+});
 test("map document treats imported city text as data, never executable markup", () => {
   const html = mapDocument([{ city: '</script><script>alert("bad")</script>', count: 1, watched: 0 }]);
   assert.ok(!html.includes('</script><script>alert'));
