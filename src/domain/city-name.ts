@@ -1,5 +1,6 @@
-export function cityName(name: string, recorded: ReadonlySet<string>) {
+const namesEndingInShi = new Set(["四日市", "津市"]);
+
+export function cityName(name: string) {
   const trimmed = name.trim();
-  const short = trimmed.replace(/市$/, "");
-  return recorded.has(short) ? short : trimmed;
+  return namesEndingInShi.has(trimmed) ? trimmed : trimmed.replace(/市$/, "");
 }

@@ -1,10 +1,12 @@
 import names from "../../assets/maps/city-names.json";
+import { cityName } from "./city-name";
 
 export function citySuggestions(input: string, recorded: string[]) {
-  const query = input.trim().replace(/市$/, "");
+  const query = cityName(input);
   if (!/[\u3400-\u9fff]/.test(query)) return [];
   const matches = new Map<string, { city: string; label: string; rank: number }>();
-  for (const city of recorded) {
+  for (const recordedCity of recorded) {
+    const city = cityName(recordedCity);
     if (city.includes(query)) matches.set(city, { city, label: "已记录", rank: city === query ? 0 : 1 });
   }
   for (const [alias, city, label] of names) {

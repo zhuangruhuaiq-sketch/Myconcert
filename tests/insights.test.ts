@@ -3,6 +3,7 @@ import test from "node:test";
 import { insights } from "../src/domain/insights";
 import { mapDocument } from "../src/domain/map-document";
 import { ConcertEvent } from "../src/domain/rules";
+import { cityName } from "../src/domain/city-name";
 
 const base: ConcertEvent = {
   id: "a", title: "test", artists: "A、B、A", type: "音乐节", city: " 上海 ", venue: "",
@@ -38,6 +39,13 @@ test("city statistics merge names with and without 市 without changing records"
   assert.deepEqual(summary.cities, [["杭州", 2], ["上海", 1], ["四日市", 1]]);
   assert.deepEqual(summary.venues, [["杭州 · 同一场馆", 2], ["上海 · 另一场馆", 1], ["四日市 · 海外场馆", 1]]);
   assert.equal(events[1].city, " 杭州市 ");
+  assert.deepEqual(insights([events[1]]).cities, [["杭州", 1]]);
+  assert.deepEqual(insights([{ ...base, city: "台北市" }]).cities, [["台北", 1]]);
+  assert.deepEqual(insights([{ ...base, city: "安顺市" }]).cities, [["安顺", 1]]);
+  assert.deepEqual(insights([{ ...base, city: "赤壁" }, { ...base, id: "chibishi", city: "赤壁市" }]).cities, [["赤壁", 2]]);
+  assert.deepEqual(insights([{ ...base, city: "昆山" }, { ...base, id: "kunshanshi", city: "昆山市" }]).cities, [["昆山", 2]]);
+  assert.equal(cityName("四日市"), "四日市");
+  assert.equal(cityName("津市"), "津市");
 });
 test("map document treats imported city text as data, never executable markup", () => {
   const html = mapDocument([{ city: '</script><script>alert("bad")</script>', count: 1, watched: 0 }]);

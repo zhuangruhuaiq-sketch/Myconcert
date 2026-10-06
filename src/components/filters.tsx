@@ -1,5 +1,6 @@
 import { Choices, Field } from "./ui";
 import { ConcertEvent, eventTypes, statuses } from "@/domain/rules";
+import { cityName } from "@/domain/city-name";
 export type Filters = {
   query: string;
   year: string;
@@ -38,7 +39,7 @@ export function filterEvents(events: ConcertEvent[], f: Filters) {
         f.query,
       ) &&
       (!f.year || new Date(e.startAt).getFullYear() === Number(f.year)) &&
-      includes(e.city, f.city) &&
+      includes(cityName(e.city), cityName(f.city)) &&
       includes(e.artists, f.artist) &&
       includes(e.venue, f.venue) &&
       (f.type === "全部" || e.type === f.type) &&

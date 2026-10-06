@@ -5,6 +5,7 @@ import { Button, Card, Choices, Field, Label, Screen } from "@/components/ui";
 import { useData } from "@/data/context";
 import { artistSuggestions, groupShows, platforms, searchPlatform, searchUrl, type Platform } from "@/domain/discovery";
 import { FoundShow } from "@/domain/rules";
+import { cityName } from "@/domain/city-name";
 
 export default function Discover() {
   const { data, change, ready, clock } = useData();
@@ -60,7 +61,7 @@ export default function Discover() {
 
   const suggestions = artistSuggestions(data.events, following);
   const visible = groupShows(results.filter((item) => following.some((artist) => item.artists.split(/[,，、;；\/]+/).some((part) => part.trim() === artist))), clock)
-    .filter((show) => (artistFilter === "全部歌手" || show.artists.includes(artistFilter)) && (!cityFilter.trim() || show.city.includes(cityFilter.trim())));
+    .filter((show) => (artistFilter === "全部歌手" || show.artists.includes(artistFilter)) && (!cityFilter.trim() || cityName(show.city).includes(cityName(cityFilter))));
   const cacheTime = Object.values(lastSuccess).sort().at(-1);
   return <Screen title="关注歌手演出">
     <Card title="关注歌手">
@@ -93,7 +94,7 @@ export default function Discover() {
     {!visible.length && <Card><Label>暂无符合条件的已验证未来场次。可查看上方各平台搜索入口。</Label></Card>}
     {visible.map((show) => {
       const saved = data.events.some((event) => show.links.some((link) => event.sourceUrl === link.url) ||
-        (event.startAt === show.startAt && event.city === show.city && event.venue === show.venue && event.artists === show.artists));
+        (event.startAt === show.startAt && cityName(event.city) === cityName(show.city) && event.venue === show.venue && event.artists === show.artists));
       return <Card key={show.links[0].url} title={show.title}>
         <Label>{show.artists}</Label>
         <Label>{new Date(show.startAt).toLocaleString()} · {show.city} · {show.venue}</Label>

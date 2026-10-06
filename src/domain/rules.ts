@@ -49,6 +49,9 @@ export type ConcertEvent = {
   rating?: number;
   review?: string;
   color: string;
+  cardBackground?: "default" | "solid" | "gradient";
+  posterColor?: string;
+  cardSolidColor?: string;
   expenses: Expense[];
   preparation: PreparationItem[];
   createdAt: string;
@@ -259,6 +262,16 @@ export function validateEvent(value: unknown): ConcertEvent {
     createdAt: timestamp(v.createdAt ?? startAt, "创建时间"),
     updatedAt: timestamp(v.updatedAt ?? startAt, "更新时间"),
   };
+  if (v.cardBackground !== undefined) {
+    if (!["default", "solid", "gradient"].includes(String(v.cardBackground))) throw new Error("卡片背景无效");
+    e.cardBackground = v.cardBackground as ConcertEvent["cardBackground"];
+  }
+  for (const field of ["posterColor", "cardSolidColor"] as const) {
+    if (v[field] !== undefined) {
+      if (typeof v[field] !== "string" || !/^#[0-9a-f]{6}$/i.test(v[field])) throw new Error("卡片颜色无效");
+      e[field] = v[field] as string;
+    }
+  }
   for (const field of [
     "address",
     "platform",

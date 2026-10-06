@@ -13,15 +13,14 @@ export default function Cities() {
   const [scope, setScope] = useState("全部行程");
   const [revision, setRevision] = useState(0);
   const events = useMemo(() => data.events.filter((e) => scope !== "已观看" || e.status === "已观看"), [data.events, scope]);
-  const recordedCities = useMemo(() => new Set(events.map((e) => e.city.trim())), [events]);
-  const cities = useMemo(() => [...new Set(events.map((e) => cityName(e.city, recordedCities)).filter(Boolean))].sort().map((name) => {
-    const records = events.filter((e) => cityName(e.city, recordedCities) === name);
+  const cities = useMemo(() => [...new Set(events.map((e) => cityName(e.city)).filter(Boolean))].sort().map((name) => {
+    const records = events.filter((e) => cityName(e.city) === name);
     return { city: name, count: records.length, watched: records.filter((e) => e.status === "已观看").length };
-  }), [events, recordedCities]);
-  const names = ["全部城市", ...cities.map((c) => c.city), ...(events.some((e) => !cityName(e.city, recordedCities)) ? ["未填写城市"] : [])];
+  }), [events]);
+  const names = ["全部城市", ...cities.map((c) => c.city), ...(events.some((e) => !cityName(e.city)) ? ["未填写城市"] : [])];
   const selected = names.includes(city) ? city : "全部城市";
-  const records = events.filter((e) => selected === "全部城市" || (cityName(e.city, recordedCities) || "未填写城市") === selected).sort((a, b) => b.startAt.localeCompare(a.startAt));
-  const mapRecords = events.filter((e) => cityName(e.city, recordedCities) === mapCity).sort((a, b) => b.startAt.localeCompare(a.startAt));
+  const records = events.filter((e) => selected === "全部城市" || (cityName(e.city) || "未填写城市") === selected).sort((a, b) => b.startAt.localeCompare(a.startAt));
+  const mapRecords = events.filter((e) => cityName(e.city) === mapCity).sort((a, b) => b.startAt.localeCompare(a.startAt));
   return <Screen title="世界里的现场">
     <Modal visible={!!mapCity} transparent animationType="fade" onRequestClose={() => setMapCity(null)}>
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24, backgroundColor: "#17142199" }}>

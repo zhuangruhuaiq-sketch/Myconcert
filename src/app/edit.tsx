@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Platform } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
@@ -21,6 +21,10 @@ import { eventPoster } from "@/domain/event-feed";
 import { DateTimeField } from "@/components/date-time-field";
 import { StarRating } from "@/components/star-rating";
 import { CityField } from "@/components/city-field";
+import { cityName } from "@/domain/city-name";
+import { CardColorPicker } from "@/components/card-color-picker";
+import { dominantColor, type Pixels } from "@/domain/poster-colors";
+import { posterPixels } from "@/domain/poster-image";
 
 export default function Edit() {
   const { id, day, found: foundParam } = useLocalSearchParams<{ id?: string; day?: string; found?: string }>();
@@ -97,6 +101,20 @@ function Form({ initial, day, found }: { initial?: ConcertEvent; day?: string; f
   const [warning, setWarning] = useState("");
   const [linkMessage, setLinkMessage] = useState("");
   const poster = eventPoster(draft);
+  const posterUri = poster?.uri;
+  const [loaded, setLoaded] = useState<{ uri: string; pixels: Pixels } | null>(null);
+  const pixels = loaded && loaded.uri === posterUri ? loaded.pixels : null;
+  useEffect(() => {
+    let active = true;
+    if (posterUri) void posterPixels(posterUri).then((image) => {
+      if (!active) return;
+      setLoaded({ uri: posterUri, pixels: image });
+      const color = dominantColor(image);
+      if (color) setDraft((previous) => eventPoster(previous)?.uri === posterUri && !previous.posterColor
+        ? { ...previous, posterColor: color } : previous);
+    }).catch((error) => { console.warn("海报取色失败", error); });
+    return () => { active = false; };
+  }, [posterUri]);
   const patch = <K extends keyof ConcertEvent>(
     key: K,
     value: ConcertEvent[K],
@@ -169,7 +187,7 @@ function Form({ initial, day, found }: { initial?: ConcertEvent; day?: string; f
     });
     if (found && data.events.some((event) => event.id !== next.id && (
       event.sourceUrl === next.sourceUrl ||
-      (event.startAt === next.startAt && event.city === next.city && event.venue === next.venue && event.artists === next.artists)
+      (event.startAt === next.startAt && cityName(event.city) === cityName(next.city) && event.venue === next.venue && event.artists === next.artists)
     ))) {
       setWarning("这场演出已在记录中，无需重复收藏。");
       return;
@@ -201,6 +219,8 @@ function Form({ initial, day, found }: { initial?: ConcertEvent; day?: string; f
       type: details.type || previous.type,
       platform: details.platform || previous.platform,
       media: media ? [media, ...(previous.media || []).filter((item) => item.role !== "海报")] : previous.media,
+      posterColor: media ? undefined : previous.posterColor,
+      cardBackground: media ? previous.cardBackground ?? "gradient" : previous.cardBackground,
     }));
     if (details.start) {
       setStart(details.start);
@@ -229,9 +249,12 @@ function Form({ initial, day, found }: { initial?: ConcertEvent; day?: string; f
           style={{ width: "100%", height: 220, borderRadius: 12 }} resizeMode="contain" />}
         <Button subtle title={poster ? "更换海报" : "添加演出海报"} onPress={async () => {
           const media = await pickMedia("海报");
-          if (media) patch("media", [media, ...(draft.media || []).filter((m) => m.role !== "海报")]);
+          if (media) setDraft((previous) => ({ ...previous,
+            media: [media, ...(previous.media || []).filter((m) => m.role !== "海报")],
+            posterColor: undefined, cardBackground: previous.cardBackground ?? "gradient" }));
         }} />
-        {poster && <Button subtle title="移除海报" onPress={() => patch("media", (draft.media || []).filter((m) => m.role !== "海报"))} />}
+        {poster && <Button subtle title="移除海报" onPress={() => setDraft((previous) => ({ ...previous,
+          media: (previous.media || []).filter((m) => m.role !== "海报"), posterColor: undefined }))} />}
         {field("演出名称 *", "title")}
         {field("艺人 / 阵容", "artists")}
         <Choices
@@ -267,6 +290,10 @@ function Form({ initial, day, found }: { initial?: ConcertEvent; day?: string; f
           onChange={(v) => patch("status", v)}
         />
       </Card>
+      <CardColorPicker event={draft} pixels={pixels} onChange={(values) => {
+        setDraft((previous) => ({ ...previous, ...values }));
+        setCollision(null);
+      }} />
       <Button
         subtle
         title={advanced ? "收起票务与记录" : "展开票务与记录"}
@@ -313,7 +340,7 @@ function Form({ initial, day, found }: { initial?: ConcertEvent; day?: string; f
             }}
           />
           {field("观后感", "review", true)}
-          {field("卡片配色（#RRGGBB）", "color")}
+          {field("其他列表标识色（#RRGGBB）", "color")}
         </Card>
       )}
       {!!warning && (

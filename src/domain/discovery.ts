@@ -1,4 +1,5 @@
 import { ConcertEvent, FoundShow } from "./rules";
+import { cityName } from "./city-name";
 
 export const platforms = ["大麦", "猫眼", "秀动", "纷玩岛", "票星球"] as const;
 export type Platform = (typeof platforms)[number];
@@ -102,7 +103,7 @@ export function groupShows(results: FoundShow[], now = Date.now()): GroupedShow[
     if (+new Date(show.startAt) <= now) continue;
     const names = show.artists.split(/[,，、;；\/]+/).map(normalize);
     const group = groups.find((item) => item.links.some((link) => link.url === show.url) ||
-      (!!show.city && !!show.venue && item.startAt === show.startAt && normalize(item.city) === normalize(show.city) && normalize(item.venue) === normalize(show.venue) &&
+      (!!show.city && !!show.venue && item.startAt === show.startAt && normalize(cityName(item.city)) === normalize(cityName(show.city)) && normalize(item.venue) === normalize(show.venue) &&
         item.artists.split(/[,，、;；\/]+/).some((name) => names.includes(normalize(name)))));
     if (group) {
       if (!group.links.some((link) => link.url === show.url)) group.links.push({ platform: show.platform, url: show.url });

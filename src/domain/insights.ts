@@ -10,10 +10,9 @@ export function rank(values: string[]) {
 export function insights(events: ConcertEvent[]) {
   const watched = events.filter((e) => e.status === "已观看");
   const rated = watched.filter((e) => e.rating !== undefined);
-  const recordedCities = new Set(watched.map((e) => e.city.trim()));
   const artists = rank(watched.flatMap((e) => [...new Set(e.artists.split(/[,，、;；\n]+/).map((s) => s.trim()).filter(Boolean))]));
-  const cities = rank(watched.map((e) => cityName(e.city, recordedCities)));
-  const venues = rank(watched.filter((e) => e.venue.trim()).map((e) => [cityName(e.city, recordedCities), e.venue.trim()].filter(Boolean).join(" · ")));
+  const cities = rank(watched.map((e) => cityName(e.city)));
+  const venues = rank(watched.filter((e) => e.venue.trim()).map((e) => [cityName(e.city), e.venue.trim()].filter(Boolean).join(" · ")));
   const months = Array.from({ length: 12 }, (_, i) => watched.filter((e) => new Date(e.startAt).getMonth() === i).length);
   const spending = [...new Set(events.map((e) => e.currency))].sort().map((currency) => {
     const records = events.filter((e) => e.currency === currency);

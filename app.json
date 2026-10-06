@@ -2,7 +2,7 @@
   "expo": {
     "name": "Myconcert",
     "slug": "myconcert",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/myconcert-icon.png",
     "scheme": "myconcert",
@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.zhuangruhuaiq.myconcert",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#171326",
         "foregroundImage": "./assets/images/myconcert-icon.png"

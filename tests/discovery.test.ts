@@ -57,7 +57,7 @@ test("maoyan parser keeps unambiguous singer dates and rejects tribute or date r
 
 test("same session merges platforms while different venues remain separate", () => {
   const base: FoundShow = { title: "巡演", artists: "许钧", city: "北京", venue: "蛙厂", startAt: "2026-10-16T12:00:00.000Z", platform: "秀动", url: "https://www.showstart.com/event/12" };
-  const groups = groupShows([base, { ...base, artists: "许钧、嘉宾", platform: "大麦", url: "https://detail.damai.cn/item.htm?id=12" }, { ...base, venue: "另一场馆", url: "https://www.showstart.com/event/13" }], Date.parse("2026-09-30T00:00:00Z"));
+  const groups = groupShows([base, { ...base, city: "北京市", artists: "许钧、嘉宾", platform: "大麦", url: "https://detail.damai.cn/item.htm?id=12" }, { ...base, venue: "另一场馆", url: "https://www.showstart.com/event/13" }], Date.parse("2026-09-30T00:00:00Z"));
   assert.equal(groups.length, 2);
   assert.equal(groups[0].links.length, 2);
 });
